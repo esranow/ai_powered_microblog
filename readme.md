@@ -1,8 +1,3 @@
-Absolutely. Here's a complete `README.md` for your **AI-powered B2B Social Media Post Generator** FastAPI project — clearly documenting what it does, how to run it, and how each part works:
-
----
-
-```markdown
 # ✨ AI-Powered B2B Social Media Post Generator
 
 This project is a minimal yet powerful **FastAPI** application that helps users generate high-quality B2B social media posts using **Google Gemini 2.5 Flash** and intelligently structured metadata.
@@ -232,3 +227,4 @@ This is ideal for:
 ## 🧠 Credits
 
 Built with ❤️ by [Sri Krishna]
+
