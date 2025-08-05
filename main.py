@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
+from fastapi import Query
 from authlib.integrations.starlette_client import OAuth
 from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
@@ -111,16 +112,49 @@ def root():
 
 @app.get("/login")
 async def login(request: Request):
+    if "swagger" in str(request.headers.get("user-agent", "")).lower():
+        raise HTTPException(status_code=400, detail="OAuth login cannot be initiated from Swagger UI.")
     redirect_uri = request.url_for('auth_callback')
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
+from starlette.responses import RedirectResponse
+
 @app.get("/auth/callback")
-async def auth_callback(request: Request):
-    token = await oauth.google.authorize_access_token(request)
-    userinfo = await oauth.google.userinfo(token=token)
-    name = userinfo.get("name")
-    email = userinfo.get("email")
-    return JSONResponse({"name": name, "email": email})
+async def auth_callback(request: Request, db: Session = Depends(get_db)):
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = await oauth.google.userinfo(token=token)
+        name = userinfo.get("name")
+        email = userinfo.get("email")
+
+        # Find or create the user
+        user = db.query(User).filter_by(email=email).first()
+        if not user:
+            user = User(name=name, email=email)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        # Store in session
+        request.session["user"] = {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+        }
+
+        return JSONResponse({"message": "Login successful", "user": request.session["user"]})
+
+    except Exception as e:
+        # Log or debug here if needed
+        return JSONResponse(status_code=400, content={"error": "OAuth callback failed", "detail": str(e)})
+
+@app.get("/test_login")
+def test_login(request: Request):
+    user = request.session.get("user")
+    if user:
+        return {"logged_in": True, "user": user}
+    return {"logged_in": False, "message": "User not logged in"}
+
 
 @app.get("/users/me")
 def get_my_info(request: Request, db: Session = Depends(get_db)):
@@ -174,6 +208,39 @@ Return only the title and post text in markdown format.
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
+from fastapi import Query
+
+@app.get("/search")
+def search_posts(q: str = Query(..., description="Search query"), db: Session = Depends(get_db)):
+    all_posts = db.query(Post).all()
+    if not all_posts:
+        return {"message": "No posts available for search."}
+
+    query_embedding = embedder.encode(q, convert_to_tensor=True)
+    post_texts = [post.content for post in all_posts]
+    post_embeddings = embedder.encode(post_texts, convert_to_tensor=True)
+    similarities = util.cos_sim(query_embedding, post_embeddings)[0]
+
+    # Pair each post with its similarity score
+    indexed_scores = [(idx, float(similarities[idx])) for idx in range(len(all_posts))]
+
+    # Sort by similarity score descending
+    top_scored = sorted(indexed_scores, key=lambda x: x[1], reverse=True)[:5]
+
+    results = []
+    for idx, score in top_scored:
+        post = all_posts[idx]
+        author = db.query(User).filter_by(id=post.user_id).first()
+        results.append({
+            "post_id": post.id,
+            "content": post.content,
+            "similarity": f"{score * 100:.2f}%",
+            "author": author.name,
+            "created_at": post.created_at,
+        })
+
+    return {"query": q, "results": results}
+
 @app.get("/feed")
 def get_feed(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user", {}).get("id")
@@ -222,6 +289,11 @@ def skip_post(post_id: int, request: Request, db: Session = Depends(get_db)):
     db.add(Skip(user_id=user_id, post_id=post_id))
     db.commit()
     return {"message": "Post skipped"}
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return {"message": "Logged out"}
 
 @app.on_event("startup")
 @repeat_every(seconds=3600)

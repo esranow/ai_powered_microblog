@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy==2.0.42
+authlib==1.6.1
+python-dotenv==1.1.1
+sentence-transformers==5.0.0
+scikit-learn==1.7.0
+joblib==1.5.1
+google-generativeai==0.8.5
+fastapi-utils==0.8.0

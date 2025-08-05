@@ -1,25 +1,31 @@
-# Use Python slim image
+# Step 1: Base image
 FROM python:3.11-slim
 
-# Set working directory
+# Step 2: Env config
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Step 3: Workdir
 WORKDIR /app
 
-# Install system dependencies
+# Step 4: Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
-    gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    libglib2.0-0 \
+    libgl1 \
+    libpq-dev \
+    git \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency list and install
+# Step 5: Install pip packages in two stages
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple --timeout 100
 
-# Copy the rest of the app code
+# Step 6: Copy source code
 COPY . .
 
-# Expose FastAPI's port
+# Step 7: Run app
 EXPOSE 8000
-
-# Start the FastAPI app
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
