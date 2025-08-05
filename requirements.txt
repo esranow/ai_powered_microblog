@@ -8,3 +8,5 @@ scikit-learn==1.7.0
 joblib==1.5.1
 google-generativeai==0.8.5
 fastapi-utils==0.8.0
+itsdangerous==2.2.0
+
