@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     git \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Step 5: Install pip packages in two stages
+# Step 5: Install pip packages
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt \
@@ -26,7 +26,8 @@ RUN pip install --upgrade pip && \
 # Step 6: Copy source code
 COPY . .
 
-# Step 7: Run app
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${PORT}"]
+# Step 7: Expose port (docs only; Render uses $PORT internally)
+EXPOSE 10000
 
+# Step 8: Start app (use shell form so $PORT is expanded)
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}
